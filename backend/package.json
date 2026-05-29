@@ -1,0 +1,30 @@
+{
+  "name": "email-reader-backend",
+  "version": "1.0.0",
+  "description": "Backend for Gmail reader",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "NODE_ENV=development tsx watch --clear-screen=false src/server.ts",
+    "dev:clean": "killall -9 tsx node 2>/dev/null || true; npm run dev",
+    "build": "tsc",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "@google/generative-ai": "^0.21.0",
+    "express": "^4.18.2",
+    "googleapis": "^134.0.0",
+    "dotenv": "^16.4.5",
+    "cors": "^2.8.5",
+    "express-session": "^1.18.0",
+    "openai": "^4.77.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.11.19",
+    "@types/cors": "^2.8.17",
+    "@types/express-session": "^1.18.0",
+    "tsx": "^4.7.1",
+    "typescript": "^5.3.3"
+  }
+}

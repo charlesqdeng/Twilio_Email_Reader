@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(chmod +x \"/Users/cdeng/Documents/Projects/Twilio_EmailReader/launch-email-reader.sh\")",
+      "Bash(osacompile -o \"/Users/cdeng/Desktop/Email Reader.app\" /tmp/email-reader-launcher.applescript)",
+      "Bash(ls -la \"/Users/cdeng/Desktop/\" | grep -i email)",
+      "Read(//Users/cdeng/Desktop/**)",
+      "Bash(chmod +x /Users/cdeng/Documents/Projects/Twilio_EmailReader/scripts/check-secrets.sh)",
+      "Bash(awk '{print $9, \"\\(\" $5, \"bytes\\)\"}')",
+      "Bash(awk '{print \"Root markdown files:\", $1}')",
+      "Bash(pkill -f \"tsx.*server.ts\")",
+      "Bash(curl -s http://localhost:3001/api/auth/status)",
+      "Bash(pkill -9 -f \"tsx.*server.ts\")",
+      "Bash(node -e \"require\\('dotenv'\\).config\\({ path: '.env.local' }\\); console.log\\('CLIENT_ID length:', process.env.GOOGLE_CLIENT_ID?.length || 0\\);\")",
+      "Bash(node -e ' *)",
+      "Bash(pkill -9 -f \"tsx\")",
+      "Bash(sed 's/=.*$/=***/')",
+      "Bash(git -C /Users/cdeng/Documents/Projects/Twilio_EmailReader status)",
+      "Bash(bash scripts/check-secrets.sh)"
+    ],
+    "additionalDirectories": [
+      "/Users/cdeng/Documents/Projects/Twilio_EmailReader/backend/src/routes"
+    ]
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "name": "email-reader",
+  "version": "1.0.0",
+  "description": "Gmail reader with AI-powered summaries",
+  "scripts": {
+    "start": "npm run dev",
+    "predev": "npm run clean:ports",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install",
+    "build:all": "npm run build:backend && npm run build:frontend",
+    "build:backend": "cd backend && npm run build",
+    "build:frontend": "cd frontend && npm run build",
+    "clean:ports": "killall -9 tsx node 2>/dev/null || true; lsof -ti :3001 2>/dev/null | xargs kill -9 2>/dev/null || true; lsof -ti :3000 2>/dev/null | xargs kill -9 2>/dev/null || true; lsof -ti :4173 2>/dev/null | xargs kill -9 2>/dev/null || true; echo '✓ Ports cleaned'; sleep 2",
+    "prestart:prod": "npm run clean:ports",
+    "start:prod": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
+    "start:backend": "cd backend && npm start",
+    "start:frontend": "cd frontend && npm run preview",
+    "deploy": "npm run build:all && npm run start:prod",
+    "pm2:start": "npm run build:all && pm2 start ecosystem.config.js",
+    "pm2:stop": "pm2 stop ecosystem.config.js",
+    "pm2:restart": "pm2 restart ecosystem.config.js",
+    "pm2:delete": "pm2 delete ecosystem.config.js",
+    "pm2:logs": "pm2 logs",
+    "security:check": "bash scripts/check-secrets.sh",
+    "prepublish": "npm run security:check"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

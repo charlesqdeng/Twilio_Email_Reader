@@ -1,0 +1,64 @@
+# Dependencies
+node_modules/
+*/node_modules/
+
+# Environment variables (contains sensitive API keys and secrets)
+# Only .env.local files should exist locally - .env.example is the template
+.env
+.env.local
+.env.*.local
+.env.production
+backend/.env.local
+backend/.env.*.local
+frontend/.env.local
+frontend/.env.*.local
+
+# User configuration (local profile data)
+.user-config.json
+backend/.user-config.json
+
+# Email history (processed emails cache)
+.email-history.json
+backend/.email-history.json
+
+# Build outputs
+dist/
+build/
+*/dist/
+*/build/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor directories and files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# TypeScript
+*.tsbuildinfo
+
+# Launcher scripts
+launch-email-reader.sh
+create-icon.sh
+LAUNCHER_README.md
+
+# Sensitive Documentation (internal use only)
+PRD.md
+CONFIGURATION.md
+DEPLOYMENT_GUIDE.md
+PRE_PUBLISH_CHECKLIST.md
+GITHUB_PUBLISH_SUMMARY.md
+PUBLISH_NOW.md
+docs/ACCOUNT_OWNERS_SETUP.md
+docs/features/ACCOUNT_OWNER_ROUTING.md
+docs/features/GONG_PROCESSING.md
+docs/features/MULTI_SHEET_SETUP.md
+docs/features/CUSTOM_SHEET_STRUCTURE.md
