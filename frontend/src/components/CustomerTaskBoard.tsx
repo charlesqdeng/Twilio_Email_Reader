@@ -43,6 +43,7 @@ interface Customer {
 
 interface CustomerTaskBoardProps {
   customers: Customer[];
+  onRequestCustomerSummary?: (request: { customerName: string; domain?: string }) => void;
 }
 
 const priorityColors = {
@@ -58,7 +59,7 @@ const urgencyColors = {
   'Low': 'text-green-400'
 };
 
-export default function CustomerTaskBoard({ customers }: CustomerTaskBoardProps) {
+export default function CustomerTaskBoard({ customers, onRequestCustomerSummary }: CustomerTaskBoardProps) {
   const [expandedCustomer, setExpandedCustomer] = useState<string | null>(null);
   const [expandedEmail, setExpandedEmail] = useState<string | null>(null);
   const [approvedTasks, setApprovedTasks] = useState<Set<string>>(new Set());
@@ -234,6 +235,24 @@ export default function CustomerTaskBoard({ customers }: CustomerTaskBoardProps)
 
   const isTaskDismissed = (customerId: string, taskTitle: string) => {
     return dismissedTasks.has(`${customerId}-${taskTitle}`);
+  };
+
+  const extractDomainFromEmail = (value?: string) => {
+    if (!value) return '';
+    const match = value.match(/<([^>]+)>|([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+    const email = (match?.[1] || match?.[2] || value).toLowerCase().trim();
+    const parts = email.split('@');
+    return parts.length === 2 ? parts[1].replace(/\/$/, '') : '';
+  };
+
+  const inferCustomerDomain = (customer: Customer) => {
+    const domains = customer.emails
+      .flatMap(email => [email.from, email.to, email.cc])
+      .map(extractDomainFromEmail)
+      .filter(Boolean)
+      .filter(domain => !domain.includes('gmail.com') && !domain.includes('googlemail.com'));
+
+    return domains[0] || '';
   };
 
   // Check if all emails from a customer are marked as read
@@ -778,17 +797,33 @@ export default function CustomerTaskBoard({ customers }: CustomerTaskBoardProps)
                     </div>
                   </div>
 
-                  {/* Expand Icon */}
-                  <svg
-                    className={`w-6 h-6 text-slate-400 transition-transform ${
-                      expandedCustomer === customer.customer_name ? 'rotate-180' : ''
-                    }`}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
+                  <div className="flex items-center gap-2">
+                    {onRequestCustomerSummary && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRequestCustomerSummary({
+                            customerName: customer.customer_name,
+                            domain: inferCustomerDomain(customer)
+                          });
+                        }}
+                        className="px-3 py-1.5 text-xs font-medium text-indigo-200 bg-indigo-900/40 border border-indigo-700 rounded-md hover:bg-indigo-900 transition"
+                      >
+                        Summarize
+                      </button>
+                    )}
+                    <svg
+                      className={`w-6 h-6 text-slate-400 transition-transform ${
+                        expandedCustomer === customer.customer_name ? 'rotate-180' : ''
+                      }`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
                 </div>
               </button>
 

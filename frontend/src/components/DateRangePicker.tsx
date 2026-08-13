@@ -9,6 +9,26 @@ export default function DateRangePicker({ onFetch, loading }: DateRangePickerPro
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
+  const formatDateInput = (date: Date) => {
+    const year = date.getFullYear();
+    const month = `${date.getMonth() + 1}`.padStart(2, '0');
+    const day = `${date.getDate()}`.padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const applyPresetRange = (days: number) => {
+    const today = new Date();
+    const start = new Date(today);
+    start.setDate(today.getDate() - (days - 1));
+
+    const nextStartDate = formatDateInput(start);
+    const nextEndDate = formatDateInput(today);
+
+    setStartDate(nextStartDate);
+    setEndDate(nextEndDate);
+    onFetch(nextStartDate, nextEndDate, false);
+  };
+
   const handleUnreadFetch = () => {
     onFetch(undefined, undefined, true);
   };
@@ -43,6 +63,31 @@ export default function DateRangePicker({ onFetch, loading }: DateRangePickerPro
             </div>
           </div>
         </button>
+      </div>
+
+      {/* Quick Date Ranges */}
+      <div>
+        <label className="block text-sm font-medium text-slate-300 mb-3">
+          Quick Date Ranges
+        </label>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <button
+            type="button"
+            onClick={() => applyPresetRange(7)}
+            disabled={loading}
+            className="px-4 py-3 bg-slate-700 border border-slate-600 text-slate-100 rounded-md hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Last 7 days
+          </button>
+          <button
+            type="button"
+            onClick={() => applyPresetRange(30)}
+            disabled={loading}
+            className="px-4 py-3 bg-slate-700 border border-slate-600 text-slate-100 rounded-md hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Last month (including today)
+          </button>
+        </div>
       </div>
 
       {/* Custom Date Range */}

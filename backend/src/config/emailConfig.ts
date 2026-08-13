@@ -18,6 +18,10 @@ export interface EmailConfig {
 
   // Newsletter/marketing domains to deprioritize
   newsletterDomains: string[];
+
+  // Company aliases - map multiple company names to a single canonical name
+  // Example: { '360smsapp': '360 Degree Cloud', '360degreecloud': '360 Degree Cloud' }
+  companyAliases: Record<string, string>;
 }
 
 // Default configuration
@@ -162,6 +166,16 @@ const DEFAULT_CONFIG: EmailConfig = {
     'aweber',
     'getresponse',
   ],
+
+  // Company aliases - normalize company names that are actually the same customer
+  // Map variations to the canonical name you want to display
+  companyAliases: {
+    '360smsapp': '360 Degree Cloud',
+    '360degreecloud': '360 Degree Cloud',
+    // Add more aliases here as needed:
+    // 'oldname': 'Canonical Name',
+    // 'variation': 'Canonical Name',
+  },
 };
 
 /**
@@ -204,6 +218,15 @@ export function getEmailConfig(): EmailConfig {
       .filter(p => p.length > 0);
   }
 
+  // Company aliases can be configured via environment as JSON
+  if (process.env.COMPANY_ALIASES) {
+    try {
+      config.companyAliases = JSON.parse(process.env.COMPANY_ALIASES);
+    } catch (error) {
+      console.error('Failed to parse COMPANY_ALIASES from environment:', error);
+    }
+  }
+
   return config;
 }
 
@@ -220,7 +243,12 @@ export function isInternalTool(companyOrDomain: string, config?: EmailConfig): b
   }
 
   // Check if it matches internal tool patterns
-  return emailConfig.internalToolDomains.some(tool => normalized.includes(tool));
+  // Use word boundary matching to avoid false positives (e.g., "square" matching "squarespace")
+  return emailConfig.internalToolDomains.some(tool => {
+    // Check for exact match or match with word boundaries (start/end of string or non-alphanumeric)
+    const pattern = new RegExp(`(^|[^a-z])${tool}([^a-z]|$)`, 'i');
+    return pattern.test(normalized);
+  });
 }
 
 /**
@@ -243,9 +271,31 @@ export function isNewsletterDomain(domain: string, config?: EmailConfig): boolea
   return emailConfig.newsletterDomains.some(nl => normalized.includes(nl));
 }
 
+/**
+ * Normalize company name using aliases
+ * If the company name matches an alias, return the canonical name
+ * Otherwise, return the original company name
+ */
+export function normalizeCompanyName(companyName: string, config?: EmailConfig): string {
+  const emailConfig = config || getEmailConfig();
+  const normalized = companyName.toLowerCase().replace(/\s+/g, '');
+
+  // Check if this company name matches any alias
+  for (const [alias, canonical] of Object.entries(emailConfig.companyAliases)) {
+    const normalizedAlias = alias.toLowerCase().replace(/\s+/g, '');
+    if (normalized === normalizedAlias) {
+      return canonical;
+    }
+  }
+
+  // No alias found, return original
+  return companyName;
+}
+
 export default {
   getEmailConfig,
   isInternalTool,
   isNotificationEmail,
   isNewsletterDomain,
+  normalizeCompanyName,
 };

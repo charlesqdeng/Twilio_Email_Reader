@@ -12,7 +12,7 @@ axios.defaults.baseURL = API_URL;
 axios.defaults.withCredentials = true;
 
 type View = 'dashboard' | 'settings';
-type Tab = 'inbox' | 'sent';
+type Tab = 'inbox' | 'sent' | 'summary';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -143,6 +143,16 @@ function App() {
                   >
                     📤 Sent (By Customer)
                   </button>
+                  <button
+                    onClick={() => setCurrentTab('summary')}
+                    className={`px-6 py-4 font-semibold border-b-2 transition ${
+                      currentTab === 'summary'
+                        ? 'border-indigo-500 text-indigo-400'
+                        : 'border-transparent text-slate-400 hover:text-slate-300'
+                    }`}
+                  >
+                    📊 Customer Activity Summary
+                  </button>
                 </div>
               </div>
             </div>
@@ -150,6 +160,8 @@ function App() {
             {/* Tab Content */}
             {currentTab === 'inbox' ? (
               <EmailDashboard onLogout={handleLogout} onShowSettings={handleShowSettings} />
+            ) : currentTab === 'summary' ? (
+              <EmailDashboard onLogout={handleLogout} onShowSettings={handleShowSettings} summaryOnly />
             ) : (
               <SentEmailsByCustomer onLogout={handleLogout} onShowSettings={handleShowSettings} />
             )}

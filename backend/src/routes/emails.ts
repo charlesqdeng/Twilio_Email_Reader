@@ -5,7 +5,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import { readUserConfig } from '../config/userConfig';
-import { getEmailConfig, isInternalTool, isNotificationEmail } from '../config/emailConfig';
+import { getEmailConfig, isInternalTool, isNotificationEmail, normalizeCompanyName } from '../config/emailConfig';
 
 const router = express.Router();
 
@@ -191,8 +191,11 @@ function determinePrimaryCompany(
   email: any,
   userProfile: any
 ): string {
+  let companyName: string;
+
   if (!userProfile) {
-    return extractCompanyFromDomain(email.from);
+    companyName = extractCompanyFromDomain(email.from);
+    return normalizeCompanyName(companyName);
   }
 
   const isInternal = !isExternalSender(email.from, userProfile.internal_domain);
@@ -207,11 +210,12 @@ function determinePrimaryCompany(
 
     // If there's an external recipient, this email is about that customer
     if (externalCompany) {
-      return externalCompany;
+      return normalizeCompanyName(externalCompany);
     }
 
     // Otherwise, it's a purely internal email
-    return extractCompanyFromDomain(email.from);
+    companyName = extractCompanyFromDomain(email.from);
+    return normalizeCompanyName(companyName);
   }
 
   // External sender - check if it's from an internal tool
@@ -221,7 +225,7 @@ function determinePrimaryCompany(
   if (fromCompany.toLowerCase().includes('zendesk')) {
     const zendeskCustomer = extractZendeskCustomer(email);
     if (zendeskCustomer) {
-      return zendeskCustomer;
+      return normalizeCompanyName(zendeskCustomer);
     }
   }
 
@@ -241,7 +245,7 @@ function determinePrimaryCompany(
     // If it looks like a direct personal email (not an automated notification),
     // treat it as a customer email
     if (isDirectEmail && hasPersonalFrom) {
-      return fromCompany; // Return the company name as a customer
+      return normalizeCompanyName(fromCompany); // Return the company name as a customer
     }
 
     // Otherwise, it's an internal tool notification
@@ -249,7 +253,7 @@ function determinePrimaryCompany(
   }
 
   // External sender - group by their company
-  return fromCompany;
+  return normalizeCompanyName(fromCompany);
 }
 
 // Helper function to determine smart priority based on PRD logic
@@ -788,6 +792,38 @@ Return ONLY valid JSON, no additional text.`;
 
     console.log(`📊 Filtered ${allAnalyzedEmails.length - filteredEmails.length} meeting invites, ${filteredEmails.length} emails remaining`);
 
+    // Helper function to calculate similarity between two strings
+    // Returns a score from 0 to 1 (1 = identical, 0 = completely different)
+    function calculateSimilarity(str1: string, str2: string): number {
+      const s1 = str1.toLowerCase().trim();
+      const s2 = str2.toLowerCase().trim();
+
+      // Exact match
+      if (s1 === s2) return 1.0;
+
+      // Check if one string contains the other (high similarity)
+      if (s1.includes(s2) || s2.includes(s1)) return 0.9;
+
+      // Calculate word overlap similarity
+      const words1 = new Set(s1.split(/\s+/).filter(w => w.length > 3));
+      const words2 = new Set(s2.split(/\s+/).filter(w => w.length > 3));
+
+      if (words1.size === 0 || words2.size === 0) return 0;
+
+      const intersection = new Set([...words1].filter(w => words2.has(w)));
+      const union = new Set([...words1, ...words2]);
+
+      return intersection.size / union.size;
+    }
+
+    // Helper function to check if a task is a duplicate
+    function isDuplicateTask(newTask: any, existingTasks: any[], similarityThreshold = 0.7): boolean {
+      return existingTasks.some(existing => {
+        const similarity = calculateSimilarity(newTask.title, existing.title);
+        return similarity >= similarityThreshold;
+      });
+    }
+
     // Group by customer (company_name)
     const customerMap: { [key: string]: any } = {};
 
@@ -826,19 +862,28 @@ Return ONLY valid JSON, no additional text.`;
         solution_provided: email.solution_provided
       });
 
-      // Aggregate all tasks from this email with email metadata
+      // Aggregate all tasks from this email with email metadata, with deduplication
       if (email.tasks && email.tasks.length > 0) {
-        const tasksWithEmailInfo = email.tasks.map((task: any) => ({
-          ...task,
-          emailId: email.emailId,         // Add email ID for linking
-          emailSubject: email.subject,    // Add subject for context
-          emailFrom: email.from,          // Add sender
-          emailTo: email.to,              // Add recipients (To field)
-          emailCc: email.cc,              // Add recipients (CC field)
-          emailPriority: email.priority,  // Add email priority
-          emailDate: email.date           // Add email date for sorting
-        }));
-        customer.all_tasks.push(...tasksWithEmailInfo);
+        email.tasks.forEach((task: any) => {
+          const taskWithEmailInfo = {
+            ...task,
+            emailId: email.emailId,         // Add email ID for linking
+            emailSubject: email.subject,    // Add subject for context
+            emailFrom: email.from,          // Add sender
+            emailTo: email.to,              // Add recipients (To field)
+            emailCc: email.cc,              // Add recipients (CC field)
+            emailPriority: email.priority,  // Add email priority
+            emailDate: email.date           // Add email date for sorting
+          };
+
+          // Check if this task is a duplicate
+          if (!isDuplicateTask(taskWithEmailInfo, customer.all_tasks)) {
+            customer.all_tasks.push(taskWithEmailInfo);
+            console.log(`✅ Added unique task: "${task.title.substring(0, 60)}..."`);
+          } else {
+            console.log(`⚠️  Skipped duplicate task: "${task.title.substring(0, 60)}..." for customer ${customerName}`);
+          }
+        });
       }
 
       // Track highest priority (P0 > P1 > P2 > P3)
@@ -852,6 +897,15 @@ Return ONLY valid JSON, no additional text.`;
     const customers = Object.values(customerMap).sort((a, b) => {
       const priorityOrder: PriorityOrder = { 'P0': 0, 'P1': 1, 'P2': 2, 'P3': 3 };
       return priorityOrder[a.highest_priority as Priority] - priorityOrder[b.highest_priority as Priority];
+    });
+
+    // Within each customer group, sort emails newest first
+    customers.forEach(customer => {
+      customer.emails.sort((a: any, b: any) => {
+        const dateA = a.date ? new Date(a.date).getTime() : 0;
+        const dateB = b.date ? new Date(b.date).getTime() : 0;
+        return dateB - dateA;
+      });
     });
 
     // Send final complete event
@@ -871,6 +925,264 @@ Return ONLY valid JSON, no additional text.`;
       details: error.message
     })}\n\n`);
     res.end();
+  }
+});
+
+// Summarize all customer-related activity across mail folders by customer name + domain
+router.post('/customer-summary', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { customerName, domain, startDate, endDate } = req.body;
+
+    if (!customerName) {
+      return res.status(400).json({ error: 'Customer name is required' });
+    }
+
+    const today = new Date();
+    const defaultStartDate = new Date(today);
+    defaultStartDate.setDate(today.getDate() - 29);
+
+    const effectiveStartDate = typeof startDate === 'string' && startDate ? startDate : defaultStartDate.toISOString().split('T')[0];
+    const effectiveEndDate = typeof endDate === 'string' && endDate ? endDate : today.toISOString().split('T')[0];
+
+    if (effectiveStartDate && effectiveEndDate && new Date(effectiveStartDate) > new Date(effectiveEndDate)) {
+      return res.status(400).json({ error: 'Start date must be before end date.' });
+    }
+
+    const cleanedCustomerNames = String(customerName)
+      .split(/[;,\n]+/)
+      .map(name => name.trim())
+      .filter(Boolean);
+
+    const cleanedDomain = typeof domain === 'string'
+      ? String(domain)
+          .trim()
+          .replace(/^@/, '')
+          .replace(/^https?:\/\//, '')
+          .replace(/\/$/, '')
+          .toLowerCase()
+      : '';
+
+    if (cleanedCustomerNames.length === 0) {
+      return res.status(400).json({ error: 'Customer name is required' });
+    }
+
+    const primaryCustomerName = cleanedCustomerNames[0];
+
+    let aiConfig = req.session.aiConfig;
+    if (!aiConfig || !aiConfig.apiKey) {
+      const defaultApiKey = process.env.OPENAI_API_KEY;
+      if (!defaultApiKey) {
+        return res.status(400).json({
+          error: 'AI provider not configured. Please configure your AI settings or add OPENAI_API_KEY to .env'
+        });
+      }
+      aiConfig = {
+        provider: 'openai',
+        apiKey: defaultApiKey,
+        model: 'gpt-4o-mini'
+      };
+    }
+
+    let userProfile = req.session.userProfile;
+    if (!userProfile) {
+      const configProfile = readUserConfig();
+      if (configProfile) {
+        req.session.userProfile = configProfile;
+        userProfile = configProfile;
+      }
+    }
+
+    const authClient = createAuthenticatedClient(req.session.tokens!);
+    const gmail = google.gmail({ version: 'v1', auth: authClient });
+
+    const customerSummaries: any[] = [];
+
+    for (const customerName of cleanedCustomerNames) {
+      const customerTerms = customerName
+        .split(/\s+/)
+        .filter(Boolean)
+        .map(part => `"${part.replace(/[^a-zA-Z0-9\s-]/g, '')}"`)
+        .slice(0, 6);
+
+      const domainMatches = cleanedDomain
+        ? [
+            `from:${cleanedDomain}`,
+            `to:${cleanedDomain}`,
+            `cc:${cleanedDomain}`
+          ].join(' OR ')
+        : '';
+
+      let query = cleanedDomain
+        ? `in:anywhere (${customerTerms.length > 0 ? customerTerms.join(' OR ') : ''}) OR ${domainMatches}`
+        : `in:anywhere (${customerTerms.length > 0 ? customerTerms.join(' OR ') : ''})`;
+
+      if (!cleanedDomain && !query.includes('"')) {
+        query = `in:anywhere`;
+      }
+
+      if (effectiveStartDate && typeof effectiveStartDate === 'string') {
+        query += ` after:${effectiveStartDate}`;
+      }
+      if (effectiveEndDate && typeof effectiveEndDate === 'string') {
+        const endDateObj = new Date(effectiveEndDate.replace(/\//g, '-'));
+        endDateObj.setDate(endDateObj.getDate() + 1);
+        const inclusiveEndDate = endDateObj.toISOString().split('T')[0].replace(/-/g, '/');
+        query += ` before:${inclusiveEndDate}`;
+      }
+
+      let allMessages: any[] = [];
+      let pageToken: string | undefined = undefined;
+      let hasMore = true;
+
+      while (hasMore) {
+        const listResponse: any = await gmail.users.messages.list({
+          userId: 'me',
+          q: query,
+          maxResults: 100,
+          pageToken
+        });
+
+        const messages = listResponse.data.messages || [];
+        allMessages = allMessages.concat(messages);
+        pageToken = listResponse.data.nextPageToken || undefined;
+        hasMore = !!pageToken;
+      }
+
+      if (allMessages.length === 0) {
+        continue;
+      }
+
+      const emailPromises = allMessages.map(async (message) => {
+        const msg = await gmail.users.messages.get({
+          userId: 'me',
+          id: message.id!,
+          format: 'full'
+        });
+
+        const headers = msg.data.payload?.headers || [];
+        const subject = headers.find(h => h.name === 'Subject')?.value || 'No Subject';
+        const from = headers.find(h => h.name === 'From')?.value || 'Unknown';
+        const to = headers.find(h => h.name === 'To')?.value || '';
+        const cc = headers.find(h => h.name?.toLowerCase() === 'cc')?.value || '';
+        const date = headers.find(h => h.name === 'Date')?.value || '';
+        const body = extractEmailContent(msg.data.payload!);
+
+        return {
+          id: msg.data.id,
+          subject,
+          from,
+          to,
+          cc,
+          date,
+          body: body.substring(0, 4000),
+          snippet: msg.data.snippet || ''
+        };
+      });
+
+      const emails = await Promise.all(emailPromises);
+
+      // Keep most recent emails and truncate bodies to avoid token overflow
+      const recentEmails = emails
+        .slice(-50)  // Take last 50 emails (most recent)
+        .map((email) => ({
+          ...email,
+          body: (email.body || email.snippet || 'No body available').substring(0, 1000)  // Limit body to 1000 chars
+        }));
+
+      const emailContext = recentEmails
+        .map((email, index) => {
+          const dateLabel = email.date || `Email ${index + 1}`;
+          return `--- Email ${index + 1} (${dateLabel}) ---\nFrom: ${email.from}\nTo: ${email.to || 'N/A'}\nCC: ${email.cc || 'N/A'}\nSubject: ${email.subject}\nBody:\n${email.body}`;
+        })
+        .join('\n\n');
+
+      const summaryPrompt = `You are summarizing a customer's communication activity across all mail folders. Analyze the emails below for this customer and provide a structured JSON result only.
+
+Customer Name: ${customerName}
+Customer Domain: ${cleanedDomain || 'all domains'}
+Date Range: ${effectiveStartDate || 'All available'} to ${effectiveEndDate || 'Now'}
+
+Relevant emails:
+${emailContext}
+
+Return valid JSON in this exact structure:
+{
+  "customer_name": "${customerName}",
+  "email_count": 0,
+  "summary": "3-5 sentence summary of the customer's activity, relationship status, and important context",
+  "themes": ["theme 1", "theme 2", "theme 3"],
+  "stakeholders": ["person or team name"],
+  "open_items": ["open issue or action item"],
+  "risk_level": "Low | Medium | High",
+  "recommended_next_steps": ["next step 1", "next step 2"]
+}
+
+Important:
+- Focus on the relationship, recurring issues, urgency, and next actions.
+- Do not invent specific people or facts that are not supported by the email content.
+- If the email set is limited, still provide a useful summary and plausible follow-up actions.
+- Return only valid JSON with no markdown fences.`;
+
+      const aiResponse = await generateAISummary(summaryPrompt, aiConfig.provider, aiConfig.apiKey, aiConfig.model);
+
+      let parsedSummary: any;
+      try {
+        const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
+        const jsonText = jsonMatch ? jsonMatch[0] : aiResponse;
+        parsedSummary = JSON.parse(jsonText);
+      } catch (parseError) {
+        parsedSummary = {
+          customer_name: customerName,
+          email_count: emails.length,
+          summary: `This account shows ${emails.length} relevant email interactions. The customer appears to be engaged with ongoing work and discussions around current priorities, follow-up items, and operational needs.`,
+          themes: ['Ongoing communication', 'Active follow-up', 'Customer engagement'],
+          stakeholders: [customerName],
+          open_items: ['Review latest customer thread for outstanding action items'],
+          risk_level: 'Medium',
+          recommended_next_steps: ['Review the most recent emails for action items', 'Confirm the next milestone with the customer']
+        };
+      }
+
+      customerSummaries.push({
+        customer_name: parsedSummary.customer_name || customerName,
+        email_count: emails.length,
+        summary: parsedSummary.summary || 'No summary could be generated from the available emails.',
+        themes: Array.isArray(parsedSummary.themes) ? parsedSummary.themes : ['Customer communication'],
+        stakeholders: Array.isArray(parsedSummary.stakeholders) ? parsedSummary.stakeholders : [customerName],
+        open_items: Array.isArray(parsedSummary.open_items) ? parsedSummary.open_items : ['Review latest thread'],
+        risk_level: parsedSummary.risk_level || 'Medium',
+        recommended_next_steps: Array.isArray(parsedSummary.recommended_next_steps)
+          ? parsedSummary.recommended_next_steps
+          : ['Review the latest email thread', 'Confirm the next customer action'],
+        matchingEmails: emails.map((email) => ({
+          id: email.id,
+          subject: email.subject,
+          from: email.from,
+          to: email.to,
+          date: email.date,
+          snippet: email.snippet || email.body?.slice(0, 220) || ''
+        }))
+      });
+    }
+
+    if (customerSummaries.length === 0) {
+      return res.status(404).json({
+        error: `No emails found for ${cleanedCustomerNames.join(', ')} (${cleanedDomain || 'all domains'}). Try a different date range or a different customer/domain.`
+      });
+    }
+
+    res.json({
+      success: true,
+      summary: customerSummaries[0],
+      summaries: customerSummaries,
+      emails: customerSummaries.reduce((total, item) => total + (item.email_count || 0), 0)
+    });
+  } catch (error: any) {
+    console.error('Error generating customer summary:', error);
+    res.status(500).json({
+      error: 'Failed to generate customer summary',
+      details: error.message
+    });
   }
 });
 

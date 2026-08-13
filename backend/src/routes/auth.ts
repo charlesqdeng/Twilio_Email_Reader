@@ -31,7 +31,8 @@ router.get('/google', (req: Request, res: Response) => {
     'https://www.googleapis.com/auth/userinfo.email',
     'https://www.googleapis.com/auth/userinfo.profile',
     'https://www.googleapis.com/auth/spreadsheets', // For creating/editing Google Sheets
-    'https://www.googleapis.com/auth/drive.file' // For creating files in Drive
+    'https://www.googleapis.com/auth/drive.file', // For creating files in Drive
+    'https://www.googleapis.com/auth/drive.metadata.readonly' // For searching/listing existing spreadsheets
   ];
 
   const url = getOAuth2Client().generateAuthUrl({

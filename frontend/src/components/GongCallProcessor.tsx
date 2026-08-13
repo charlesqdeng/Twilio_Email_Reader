@@ -163,7 +163,7 @@ export default function GongCallProcessor({ onClose }: GongCallProcessorProps) {
           {calls.length === 0 && !loading && (
             <div className="text-center py-12">
               <button
-                onClick={fetchGongCalls}
+                onClick={() => fetchGongCalls()}
                 className="px-6 py-3 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition"
               >
                 Fetch Gong Calls
@@ -298,7 +298,7 @@ export default function GongCallProcessor({ onClose }: GongCallProcessorProps) {
                 </a>
               )}
               <button
-                onClick={fetchGongCalls}
+                onClick={() => fetchGongCalls(true)}
                 disabled={loading}
                 className="px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-500 disabled:opacity-50 disabled:cursor-not-allowed transition"
               >
